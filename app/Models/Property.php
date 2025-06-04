@@ -18,6 +18,7 @@ class Property extends Model
         'furnished',
         'price_ksh',
         'bedroom_count',
+        'bathroom_count',
         'garage_count',
         'description',
         'features',
