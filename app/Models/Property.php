@@ -34,9 +34,9 @@ class Property extends Model
     ];
     public $timestamps = false;
 
-    public function image()
+    public function images()
     {
-        return $this->hasMany(image::class, 'property_id');
+        return $this->hasMany(Image::class, 'property_id');
     }
 
 }
