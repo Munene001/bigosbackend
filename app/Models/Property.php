@@ -23,6 +23,9 @@ class Property extends Model
         'description',
         'features',
         'amenities',
+        'listing_type',
+        'construction_status',
+
     ];
     protected $casts = [
         'furnished' => 'string',

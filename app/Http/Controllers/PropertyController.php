@@ -31,6 +31,7 @@ class PropertyController extends Controller
                 'amenities' => 'required|string|max:1200',
                 'primary_image' => 'required|image|mimes:jpeg,png,jpg,webp|max:250',
                 'gallery_images.*' => 'nullable|image|mimes:jpeg,png,jpg,webp|max:250',
+                'construction_status' => 'required|in:complete,unfinished',
             ]);
 
             // Create property record
@@ -150,23 +151,23 @@ class PropertyController extends Controller
         return response()->json($property);
     }
 
-    public function index()
+    public function index(Request $request)
     {
-        $properties = Property::with('images')->get();
-        return response()->json($properties);
+        $listingType = $request->query('listing_type');
+        $query = Property::with('images');
+        if ($listingType) {
+            $query->where('listing_type', $listingType);
+        }
+        $properties = $query->get();
+        $count = $listingType
+        ? Property::where('listing_type', $listingType)->count()
+        : Property::count();
+        return response()->json(['properties' => $properties, 'count' => $count, 'listing_type' => $listingType]);
     }
 
     public function destroy($id)
     {
         $property = Property::findOrFail($id);
-        $images = Image::where('property_id', $id)->get();
-        foreach ($images as $image) {
-            $path = str_replace('https://kevsbuilders.co.ke/bigos/', public_path('bigos/'), $image->image_url);
-            if (file_exists($path)) {
-                unlink($path);
-            }
-            $image->delete();
-        }
         $property->delete();
         return response()->json(['message' => 'Property deleted successfully']);
     }
@@ -187,6 +188,8 @@ class PropertyController extends Controller
             'description' => 'required|string|max:1200',
             'features' => 'required|string|max:1200',
             'amenities' => 'required|string|max:1200',
+            'listing_type' => 'required|in:for sale,for rent',
+            'construction_status' => 'required| in:complete, unfinished',
             'primary_image' => 'nullable|image|mimes:jpeg,png,jpg,webp|max:250',
             'gallery_images.*' => 'image|mimes:jpeg,png,jpg,webp|max:250',
         ]);
