@@ -24,3 +24,4 @@ Route::get('/properties/{id}', [PropertyController::class, 'show']);
 Route::delete('/properties/{id}', [PropertyController::class, 'destroy']);
 Route::post('/properties/{id}', [PropertyController::class, 'update']);
 Route::delete('/images/{image_id}', [PropertyController::class, 'deleteImage']);
+Route::get('/properties/filter', [PropertyController::class, 'filter']);

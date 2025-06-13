@@ -255,4 +255,81 @@ class PropertyController extends Controller
             //throw $th;
         }
     }
+    public function filter(Request $request)
+    {
+        try {
+            // Get all input parameters with null coalescing
+            $bedrooms = $request->input('bedrooms');
+            $location = $request->input('location');
+            $bathrooms = $request->input('bathrooms');
+            $minPrice = $request->input('min_price', 0); // Default to 0 if not provided
+            $maxPrice = $request->input('max_price', 1000000000); // Default to large number
+            $furnished = $request->input('furnished');
+            $constructionStatus = $request->input('construction_status');
+            $page = $request->input('page', 1);
+            $perPage = $request->input('per_page', 10);
+
+            // Start query
+            $query = Property::query()->with('images');
+
+            // Apply filters only if they have values
+
+            if (!empty($bathrooms)) {
+                $query->where('bathroom_count', (int) $bathrooms);
+            }
+            if (!empty($bedrooms)) {
+                $query->where('bedroom_count', (int) $bedrooms);
+            }
+
+            if (!empty($location)) {
+                $query->where('location', 'LIKE', '%' . $location . '%');
+            }
+
+            // Always apply price range with defaults
+            $query->whereBetween('price_ksh', [
+                (float) $minPrice,
+                (float) $maxPrice,
+            ]);
+
+            if (!empty($furnished) && in_array($furnished, ['Yes', 'No'])) {
+                $query->where('furnished', $furnished);
+            }
+
+            if (!empty($constructionStatus) && in_array($constructionStatus, ['complete', 'unfinished'])) {
+                $query->where('construction_status', $constructionStatus);
+            }
+
+            // Get paginated results
+            $results = $query->paginate(
+                $perPage,
+                ['*'],
+                'page',
+                $page
+            );
+
+            // Return consistent response structure
+            return response()->json([
+                'success' => true,
+                'data' => [
+                    'properties' => $results->items(),
+                    'meta' => [
+                        'total' => $results->total(),
+                        'current_page' => $results->currentPage(),
+                        'last_page' => $results->lastPage(),
+                        'per_page' => $results->perPage(),
+                    ],
+                    'filters' => $request->all(),
+                ],
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('Filter error: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Filtering failed',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
 }
