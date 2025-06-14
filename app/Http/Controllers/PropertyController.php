@@ -12,10 +12,9 @@ class PropertyController extends Controller
 {
     public function store(Request $request)
     {
-        // Start database transaction
 
         try {
-            // Validate request data
+
             $validated = $request->validate([
                 'title' => 'required|string|max:255',
                 'location' => 'required|string|max:255',
@@ -34,13 +33,11 @@ class PropertyController extends Controller
                 'construction_status' => 'required|in:complete,unfinished',
             ]);
 
-            // Create property record
             $property = Property::create($validated);
             if (!$property) {
                 throw new \Exception('Failed to create property record');
             }
 
-            // Handle primary image upload
             if (!$request->hasFile('primary_image')) {
                 throw new \Exception('Primary image is required');
             }
@@ -50,20 +47,16 @@ class PropertyController extends Controller
                 throw new \Exception('Failed to upload primary image');
             }
 
-            // Handle gallery images if present
             if ($request->hasFile('gallery_images')) {
                 foreach ($request->file('gallery_images') as $image) {
                     try {
                         $this->storeImage($image, $property->id, false);
                     } catch (\Exception $e) {
                         Log::error('Gallery image upload failed: ' . $e->getMessage());
-                        // Continue processing other images even if one fails
                         continue;
                     }
                 }
             }
-
-            // Commit transaction if everything succeeded
 
             return response()->json([
                 'message' => 'Property created successfully',
@@ -81,7 +74,6 @@ class PropertyController extends Controller
 
             Log::error('Property creation failed: ' . $e->getMessage());
 
-            // Clean up any uploaded files if property creation failed
             if (isset($property)) {
                 try {
                     $property->images()->delete();
@@ -101,12 +93,11 @@ class PropertyController extends Controller
     private function storeImage($imageFile, $propertyId, $isPrimary)
     {
         try {
-            // Validate file
+
             if (!$imageFile->isValid()) {
                 throw new \Exception('Invalid file uploaded');
             }
 
-            // Create directory if it doesn't exist
             $directory = public_path('bigos');
             if (!file_exists($directory)) {
                 if (!mkdir($directory, 0755, true) && !is_dir($directory)) {
@@ -114,15 +105,12 @@ class PropertyController extends Controller
                 }
             }
 
-            // Generate unique filename
             $filename = time() . '_' . Str::random(10) . '.' . $imageFile->getClientOriginalExtension();
 
-            // Move uploaded file
             if (!$imageFile->move($directory, $filename)) {
                 throw new \Exception("Failed to move uploaded file to {$directory}");
             }
 
-            // Create image record
             $image = Image::create([
                 'property_id' => $propertyId,
                 'image_url' => asset("bigos/{$filename}"), // Fixed string interpolation
@@ -130,7 +118,7 @@ class PropertyController extends Controller
             ]);
 
             if (!$image) {
-                // Delete the file if record creation failed
+
                 if (file_exists("{$directory}/{$filename}")) {
                     unlink("{$directory}/{$filename}");
                 }
@@ -141,7 +129,7 @@ class PropertyController extends Controller
 
         } catch (\Exception $e) {
             Log::error('Image upload failed: ' . $e->getMessage());
-            throw $e; // Re-throw for handling in the calling method
+            throw $e;
         }
     }
 
@@ -258,77 +246,75 @@ class PropertyController extends Controller
     public function filter(Request $request)
     {
         try {
-            // Get all input parameters with null coalescing
-            $bedrooms = $request->input('bedrooms');
-            $location = $request->input('location');
-            $bathrooms = $request->input('bathrooms');
-            $minPrice = $request->input('min_price', 0); // Default to 0 if not provided
-            $maxPrice = $request->input('max_price', 1000000000); // Default to large number
-            $furnished = $request->input('furnished');
-            $constructionStatus = $request->input('construction_status');
-            $page = $request->input('page', 1);
-            $perPage = $request->input('per_page', 10);
+            // 1. Get all filter values with proper null checking
+            $filters = [
+                'bedrooms' => $request->filled('bedrooms') ? (int) $request->input('bedrooms') : null,
+                'bathrooms' => $request->filled('bathrooms') ? (int) $request->input('bathrooms') : null,
+                'location' => $request->filled('location') ? $request->input('location') : null,
+                'min_price' => (float) $request->input('min_price', 0),
+                'max_price' => (float) $request->input('max_price', 1000000000),
+                'furnished' => $request->filled('furnished') ? $request->input('furnished') : null,
+                'construction_status' => $request->filled('construction_status') ? $request->input('construction_status') : null,
+                'page' => (int) $request->input('page', 1),
+                'per_page' => (int) $request->input('per_page', 10),
+            ];
 
-            // Start query
-            $query = Property::query()->with('images');
+            // 2. Start the query
+            $query = Property::with('images');
 
-            // Apply filters only if they have values
-
-            if (!empty($bathrooms)) {
-                $query->where('bathroom_count', (int) $bathrooms);
-            }
-            if (!empty($bedrooms)) {
-                $query->where('bedroom_count', (int) $bedrooms);
+            // 3. Apply each filter if it has a value
+            if (!is_null($filters['bedrooms'])) {
+                $query->where('bedroom_count', $filters['bedrooms']);
             }
 
-            if (!empty($location)) {
-                $query->where('location', 'LIKE', '%' . $location . '%');
+            if (!is_null($filters['bathrooms'])) {
+                $query->where('bathroom_count', $filters['bathrooms']);
             }
 
-            // Always apply price range with defaults
+            if (!is_null($filters['location'])) {
+                $query->where('location', 'LIKE', '%' . $filters['location'] . '%');
+            }
+
             $query->whereBetween('price_ksh', [
-                (float) $minPrice,
-                (float) $maxPrice,
+                $filters['min_price'],
+                $filters['max_price'],
             ]);
 
-            if (!empty($furnished) && in_array($furnished, ['Yes', 'No'])) {
-                $query->where('furnished', $furnished);
+            if (!is_null($filters['furnished']) && in_array($filters['furnished'], ['Yes', 'No'])) {
+                $query->where('furnished', $filters['furnished']);
             }
 
-            if (!empty($constructionStatus) && in_array($constructionStatus, ['complete', 'unfinished'])) {
-                $query->where('construction_status', $constructionStatus);
+            if (!is_null($filters['construction_status']) && in_array($filters['construction_status'], ['complete', 'unfinished'])) {
+                $query->where('construction_status', $filters['construction_status']);
             }
 
-            // Get paginated results
+            // 4. Get paginated results
             $results = $query->paginate(
-                $perPage,
+                $filters['per_page'],
                 ['*'],
                 'page',
-                $page
+                $filters['page']
             );
 
-            // Return consistent response structure
+            // 5. Return the response with applied filters
             return response()->json([
                 'success' => true,
-                'data' => [
-                    'properties' => $results->items(),
-                    'meta' => [
-                        'total' => $results->total(),
-                        'current_page' => $results->currentPage(),
-                        'last_page' => $results->lastPage(),
-                        'per_page' => $results->perPage(),
-                    ],
-                    'filters' => $request->all(),
-                ],
+                'properties' => $results->items(),
+                'total' => $results->total(),
+                'current_page' => $results->currentPage(),
+                'last_page' => $results->lastPage(),
+                'per_page' => $results->perPage(),
+                'applied_filters' => array_filter($filters, function ($value) {
+                    return !is_null($value);
+                }),
             ]);
 
         } catch (\Exception $e) {
-            Log::error('Filter error: ' . $e->getMessage());
             return response()->json([
                 'success' => false,
                 'message' => 'Filtering failed',
                 'error' => $e->getMessage(),
-            ], 500);
+            ], status: 500);
         }
     }
 
